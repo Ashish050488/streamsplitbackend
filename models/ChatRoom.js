@@ -1,6 +1,6 @@
 const mongoose = require('mongoose');
 const schema = new mongoose.Schema({
-    type: { type: String, enum: ['group', 'dm'], required: true },
+    type: { type: String, enum: ['group', 'dm', 'support'], required: true },
     group_id: { type: mongoose.Schema.Types.ObjectId, ref: 'Group', default: null },
     participants: [{ type: mongoose.Schema.Types.ObjectId, ref: 'User' }],
     last_message_at: { type: Date, default: null },

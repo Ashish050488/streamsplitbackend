@@ -17,10 +17,12 @@ const schema = new mongoose.Schema({
   duration_days: { type: Number, default: 30 },
   start_date: { type: Date },
   end_date: { type: Date },
+  rules: { type: String, default: '' },
+  onboarding_steps: [{ title: String, description: String, is_required: { type: Boolean, default: false } }],
+  allow_member_invites: { type: Boolean, default: true },
 }, { timestamps: true });
 
 schema.index({ is_public: 1, status: 1 });
-schema.index({ invite_code: 1 });
 schema.index({ name: 'text', description: 'text' });
 schema.index({ created_by: 1 });
 

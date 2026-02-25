@@ -76,6 +76,7 @@ app.use('/api/v1/plans', require('./routes/plan.routes'));
 app.use('/api/v1/cart', require('./routes/cart.routes'));
 app.use('/api/v1/orders', require('./routes/order.routes'));
 app.use('/api/v1/wallet', require('./routes/wallet.routes'));
+app.use('/api/v1/groups/invite', require('./routes/invite.routes'));
 app.use('/api/v1/groups', require('./routes/group.routes'));
 app.use('/api/v1/payments', require('./routes/payment.routes'));
 app.use('/api/v1/earnings', require('./routes/earnings.routes'));
@@ -84,6 +85,8 @@ app.use('/api/v1/coupons', require('./routes/coupon.routes'));
 app.use('/api/v1/admin', require('./routes/admin.routes'));
 app.use('/api/v1/friends', require('./routes/friend.routes'));
 app.use('/api/v1/chat', require('./routes/chat.routes'));
+app.use('/api/v1/vault', require('./routes/vault.routes'));
+app.use('/api/v1/search', require('./routes/search.routes'));
 
 // ─── 404 Handler ─────────────────────────────────────────────
 app.use((req, res) => {
