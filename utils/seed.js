@@ -71,18 +71,18 @@ async function seed() {
 
   // ─── Brands ─────────────────────────────────────
   const brands = await Brand.insertMany([
-    { category_id: cats[0]._id, name: 'Netflix', slug: 'netflix', logo_url: '/images/brands/netflix.png', description: 'Stream movies & TV shows', tags: ['streaming', 'movies', 'series'], is_featured: true },
-    { category_id: cats[0]._id, name: 'Disney+ Hotstar', slug: 'disney-hotstar', logo_url: '/images/brands/hotstar.png', description: 'Movies, sports & original shows', tags: ['streaming', 'sports', 'disney'], is_featured: true },
-    { category_id: cats[0]._id, name: 'Amazon Prime Video', slug: 'prime-video', logo_url: '/images/brands/prime.png', description: 'Stream & free delivery', tags: ['streaming', 'shopping'], is_featured: true },
-    { category_id: cats[0]._id, name: 'YouTube Premium', slug: 'youtube-premium', logo_url: '/images/brands/youtube.png', description: 'Ad-free videos & music', tags: ['streaming', 'music', 'youtube'], is_featured: true },
-    { category_id: cats[1]._id, name: 'Spotify', slug: 'spotify', logo_url: '/images/brands/spotify.png', description: 'Music for everyone', tags: ['music', 'podcast'], is_featured: true },
-    { category_id: cats[1]._id, name: 'Apple Music', slug: 'apple-music', logo_url: '/images/brands/apple-music.png', description: '100M+ songs ad-free', tags: ['music', 'apple'] },
-    { category_id: cats[2]._id, name: 'Google One', slug: 'google-one', logo_url: '/images/brands/google-one.png', description: 'Cloud storage & VPN', tags: ['cloud', 'storage', 'google'] },
-    { category_id: cats[3]._id, name: 'Xbox Game Pass', slug: 'xbox-game-pass', logo_url: '/images/brands/xbox.png', description: 'Hundreds of games', tags: ['gaming', 'xbox'], is_featured: true },
-    { category_id: cats[4]._id, name: 'Coursera Plus', slug: 'coursera-plus', logo_url: '/images/brands/coursera.png', description: 'Unlimited learning', tags: ['education', 'courses'] },
-    { category_id: cats[5]._id, name: 'NordVPN', slug: 'nordvpn', logo_url: '/images/brands/nordvpn.png', description: 'Secure internet access', tags: ['vpn', 'security', 'privacy'] },
-    { category_id: cats[6]._id, name: 'Canva Pro', slug: 'canva-pro', logo_url: '/images/brands/canva.png', description: 'Design made easy', tags: ['design', 'productivity'] },
-    { category_id: cats[7]._id, name: 'Cult.fit', slug: 'cult-fit', logo_url: '/images/brands/cultfit.png', description: 'Fitness, mind & body', tags: ['fitness', 'gym', 'yoga'] },
+    { category_id: cats[0]._id, name: 'Netflix', slug: 'netflix', logo_url: '/images/logos/netflix.svg', brand_color: '#E50914', description: 'Stream movies & TV shows', tags: ['streaming', 'movies', 'series'], is_featured: true },
+    { category_id: cats[0]._id, name: 'Disney+ Hotstar', slug: 'disney-hotstar', logo_url: '/images/logos/disney-hotstar.svg', brand_color: '#1A73E8', description: 'Movies, sports & original shows', tags: ['streaming', 'sports', 'disney'], is_featured: true },
+    { category_id: cats[0]._id, name: 'Amazon Prime Video', slug: 'prime-video', logo_url: '/images/logos/prime-video.svg', brand_color: '#00A8E1', description: 'Stream & free delivery', tags: ['streaming', 'shopping'], is_featured: true },
+    { category_id: cats[0]._id, name: 'YouTube Premium', slug: 'youtube-premium', logo_url: '/images/logos/youtube.svg', brand_color: '#FF0000', description: 'Ad-free videos & music', tags: ['streaming', 'music', 'youtube'], is_featured: true },
+    { category_id: cats[1]._id, name: 'Spotify', slug: 'spotify', logo_url: '/images/logos/spotify.svg', brand_color: '#1DB954', description: 'Music for everyone', tags: ['music', 'podcast'], is_featured: true },
+    { category_id: cats[1]._id, name: 'Apple Music', slug: 'apple-music', logo_url: '/images/logos/apple-music.svg', brand_color: '#FA2D48', description: '100M+ songs ad-free', tags: ['music', 'apple'] },
+    { category_id: cats[2]._id, name: 'Google One', slug: 'google-one', logo_url: '/images/logos/google-one.svg', brand_color: '#4285F4', description: 'Cloud storage & VPN', tags: ['cloud', 'storage', 'google'] },
+    { category_id: cats[3]._id, name: 'Xbox Game Pass', slug: 'xbox-game-pass', logo_url: '/images/logos/xbox.svg', brand_color: '#107C10', description: 'Hundreds of games', tags: ['gaming', 'xbox'], is_featured: true },
+    { category_id: cats[4]._id, name: 'Coursera Plus', slug: 'coursera-plus', logo_url: '/images/logos/coursera.svg', brand_color: '#0056D2', description: 'Unlimited learning', tags: ['education', 'courses'] },
+    { category_id: cats[5]._id, name: 'NordVPN', slug: 'nordvpn', logo_url: '/images/logos/nordvpn.svg', brand_color: '#4687FF', description: 'Secure internet access', tags: ['vpn', 'security', 'privacy'] },
+    { category_id: cats[6]._id, name: 'Canva Pro', slug: 'canva-pro', logo_url: '/images/logos/canva.svg', brand_color: '#00C4CC', description: 'Design made easy', tags: ['design', 'productivity'] },
+    { category_id: cats[7]._id, name: 'Cult.fit', slug: 'cult-fit', logo_url: '/images/logos/cultfit.svg', brand_color: '#FF3E6C', description: 'Fitness, mind & body', tags: ['fitness', 'gym', 'yoga'] },
   ]);
 
   // ─── Plans ──────────────────────────────────────

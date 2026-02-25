@@ -4,6 +4,8 @@ const schema = new mongoose.Schema({
   name: { type: String, required: true },
   slug: { type: String, required: true, unique: true },
   logo_url: { type: String, default: '' },
+  logo_dark_url: { type: String, default: '' },
+  brand_color: { type: String, default: '' },
   cover_url: { type: String, default: '' },
   description: { type: String, default: '' },
   tags: [String],
