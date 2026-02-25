@@ -82,6 +82,8 @@ app.use('/api/v1/earnings', require('./routes/earnings.routes'));
 app.use('/api/v1/withdrawals', require('./routes/withdrawal.routes'));
 app.use('/api/v1/coupons', require('./routes/coupon.routes'));
 app.use('/api/v1/admin', require('./routes/admin.routes'));
+app.use('/api/v1/friends', require('./routes/friend.routes'));
+app.use('/api/v1/chat', require('./routes/chat.routes'));
 
 // ─── 404 Handler ─────────────────────────────────────────────
 app.use((req, res) => {

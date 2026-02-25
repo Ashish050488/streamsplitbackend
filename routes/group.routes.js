@@ -264,4 +264,48 @@ router.post('/:id/archive', authenticate, async (req, res, next) => {
   } catch (err) { next(err); }
 });
 
+// ─── GET /groups/:id/members — Members roster ───────────────
+router.get('/:id/members', authenticate, async (req, res, next) => {
+  try {
+    const uid = req.user._id;
+    const membership = await GroupMembership.findOne({ group_id: req.params.id, user_id: uid });
+    if (!membership) return res.status(403).json({ success: false, message: 'Not a member of this group' });
+
+    const group = await Group.findById(req.params.id).select('name share_limit member_count created_by');
+    if (!group) return res.status(404).json({ success: false, message: 'Group not found' });
+
+    const members = await GroupMembership.find({ group_id: req.params.id })
+      .populate('user_id', 'name phone avatar_url')
+      .sort({ role: 1, joined_at: 1 });
+
+    const maskPhone = (phone) => {
+      if (!phone || phone.length < 6) return '****';
+      return phone.slice(0, 4) + '******' + phone.slice(-2);
+    };
+
+    const memberList = members.map(m => ({
+      user_id: m.user_id._id,
+      name: m.user_id.name || 'User',
+      phone_masked: maskPhone(m.user_id.phone),
+      role: m.role === 'owner' ? 'OWNER' : 'MEMBER',
+      joined_at: m.joined_at,
+      is_you: m.user_id._id.toString() === uid.toString(),
+    }));
+
+    res.json({
+      success: true,
+      data: {
+        group: {
+          _id: group._id,
+          name: group.name,
+          share_limit: group.share_limit,
+          member_count: group.member_count,
+          owner_id: group.created_by,
+        },
+        members: memberList,
+      },
+    });
+  } catch (err) { next(err); }
+});
+
 module.exports = router;
