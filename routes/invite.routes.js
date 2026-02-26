@@ -4,7 +4,10 @@ const Razorpay = require('razorpay');
 const Group = require('../models/Group');
 const GroupMembership = require('../models/GroupMembership');
 const GroupInvite = require('../models/GroupInvite');
+const GroupTransaction = require('../models/GroupTransaction');
+const EarningsAccount = require('../models/EarningsAccount');
 const JoinIntent = require('../models/JoinIntent');
+const BRAND = require('../../brand.config');
 const { authenticate, optionalAuth } = require('../middleware/auth');
 
 let razorpay = null;
@@ -118,22 +121,32 @@ router.post('/:code/join/initiate', authenticate, async (req, res, next) => {
         if (amount === 0) {
             intentData.status = 'paid';
             const intent = await JoinIntent.create(intentData);
-            await joinGroup(group, req.user._id, invite);
+            await joinAndCreditEarnings(group, req.user._id, invite, intent);
+            console.log(`📋 JOIN_INTENT_CREATED (free) | intentId=${intent._id} | groupId=${group._id} | amount=0`);
             return res.json({ success: true, data: { joinIntentId: intent._id, joined: true, group_id: group._id }, message: 'Joined successfully (free group)' });
         }
 
         // Wallet payment
         if (paymentMethod === 'wallet') {
-            const Wallet = require('../models/Wallet');
-            const wallet = await Wallet.findOne({ user_id: req.user._id });
+            const WalletAccount = require('../models/WalletAccount');
+            const WalletTransaction = require('../models/WalletTransaction');
+            const wallet = await WalletAccount.findOne({ user_id: req.user._id });
             if (!wallet || wallet.balance < amount) {
                 return res.status(402).json({ success: false, error: 'INSUFFICIENT_FUNDS', message: 'Not enough wallet balance' });
             }
             wallet.balance -= amount;
             await wallet.save();
+            // Record wallet debit
+            await WalletTransaction.create({
+                wallet_id: wallet._id, type: 'debit', amount,
+                balance_after: wallet.balance, source: 'purchase',
+                description: `Seat purchase for group "${group.name}"`,
+            });
             intentData.status = 'paid';
+            intentData.razorpay_payment_id = `wallet_${Date.now()}`;
             const intent = await JoinIntent.create(intentData);
-            await joinGroup(group, req.user._id, invite);
+            await joinAndCreditEarnings(group, req.user._id, invite, intent);
+            console.log(`📋 JOIN_INTENT_CREATED (wallet) | intentId=${intent._id} | groupId=${group._id} | amount=${amount}`);
             return res.json({ success: true, data: { joinIntentId: intent._id, joined: true, group_id: group._id }, message: 'Joined successfully (wallet)' });
         }
 
@@ -146,6 +159,9 @@ router.post('/:code/join/initiate', authenticate, async (req, res, next) => {
             });
             intentData.razorpay_order_id = order.id;
             const intent = await JoinIntent.create(intentData);
+
+            console.log(`📋 JOIN_INTENT_CREATED (razorpay) | intentId=${intent._id} | orderId=${order.id} | gross=${amount}`);
+
             return res.json({
                 success: true,
                 data: {
@@ -158,16 +174,13 @@ router.post('/:code/join/initiate', authenticate, async (req, res, next) => {
             });
         }
 
-        // Dev fallback — create intent, let dev confirm manually
+        // Dev fallback
+        intentData.razorpay_payment_id = `dev_${Date.now()}`;
         const intent = await JoinIntent.create(intentData);
+        console.log(`📋 JOIN_INTENT_CREATED (dev) | intentId=${intent._id} | groupId=${group._id} | amount=${amount}`);
         return res.json({
             success: true,
-            data: {
-                joinIntentId: intent._id,
-                amount,
-                currency: 'INR',
-                payment_method: 'dev',
-            },
+            data: { joinIntentId: intent._id, amount, currency: 'INR', payment_method: 'dev' },
         });
     } catch (err) { next(err); }
 });
@@ -175,7 +188,6 @@ router.post('/:code/join/initiate', authenticate, async (req, res, next) => {
 // ─── POST /invite/:code/join/confirm — Dev confirmation ──────
 router.post('/:code/join/confirm', authenticate, async (req, res, next) => {
     try {
-        // Only allow in non-production
         if (process.env.NODE_ENV === 'production') {
             return res.status(403).json({ success: false, message: 'Dev confirm not available in production' });
         }
@@ -194,16 +206,18 @@ router.post('/:code/join/confirm', authenticate, async (req, res, next) => {
 
         // Mark paid
         intent.status = 'paid';
+        intent.razorpay_payment_id = `dev_confirm_${Date.now()}`;
         await intent.save();
 
-        await joinGroup(group, req.user._id, invite);
+        await joinAndCreditEarnings(group, req.user._id, invite, intent);
 
-        res.json({ success: true, data: { group_id: group._id }, message: 'Joined successfully' });
+        console.log(`✅ DEV_CONFIRM | intentId=${intent._id} | groupId=${group._id}`);
+        res.json({ success: true, data: { group_id: group._id, joinIntentId: intent._id }, message: 'Joined successfully' });
     } catch (err) { next(err); }
 });
 
-// ─── Helper: atomically join group ────────────────────────────
-async function joinGroup(group, userId, invite) {
+// ─── Helper: join group + credit owner earnings ───────────────
+async function joinAndCreditEarnings(group, userId, invite, intent) {
     // Double check not already member
     const existing = await GroupMembership.findOne({ group_id: group._id, user_id: userId, status: { $ne: 'left' } });
     if (existing) return;
@@ -227,6 +241,48 @@ async function joinGroup(group, userId, invite) {
 
     // Increment invite uses
     await GroupInvite.findByIdAndUpdate(invite._id, { $inc: { uses_count: 1 } });
+
+    // Credit owner earnings (skip if amount = 0)
+    if (intent.amount > 0) {
+        const ownerMembership = await GroupMembership.findOne({ group_id: group._id, role: 'owner' });
+        if (!ownerMembership) {
+            console.error(`❌ No owner found for group ${group._id} — cannot credit earnings`);
+            return;
+        }
+
+        const gross = intent.amount;
+        const feePercent = BRAND.money.platformCutPercent;
+        const feeAmount = Math.round(gross * feePercent / 100);
+        const net = gross - feeAmount;
+        const holdHours = BRAND.money.withdrawalHoldHours || 0;
+        const pendingReleaseAt = holdHours > 0 ? new Date(Date.now() + holdHours * 3600000) : null;
+
+        // Idempotent: check if GroupTransaction already exists
+        const existingTx = await GroupTransaction.findOne({ razorpay_payment_id: intent.razorpay_payment_id });
+        if (!existingTx) {
+            await GroupTransaction.create({
+                group_id: group._id,
+                owner_id: ownerMembership.user_id,
+                buyer_id: userId,
+                gross, fee_percent: feePercent, fee_amount: feeAmount, net,
+                razorpay_order_id: intent.razorpay_order_id,
+                razorpay_payment_id: intent.razorpay_payment_id,
+                pending_release_at: pendingReleaseAt,
+                status: 'paid',
+            });
+
+            const earningsInc = holdHours > 0
+                ? { pending_balance: net, total_earned: net }
+                : { withdrawable_balance: net, total_earned: net };
+            const earningsAfter = await EarningsAccount.findOneAndUpdate(
+                { user_id: ownerMembership.user_id },
+                { $inc: earningsInc },
+                { upsert: true, new: true }
+            );
+
+            console.log(`💰 EARNINGS_CREDITED | ownerId=${ownerMembership.user_id} | gross=${gross} | fee=${feeAmount} (${feePercent}%) | net=${net} | withdrawable=${earningsAfter.withdrawable_balance} | pending=${earningsAfter.pending_balance || 0}`);
+        }
+    }
 }
 
 module.exports = router;

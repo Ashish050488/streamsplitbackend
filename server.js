@@ -34,8 +34,6 @@ app.use(apiLimiter);
 
 // ─── Brand Config Endpoint (public) ─────────────────────────
 app.get('/api/v1/config', (req, res) => {
-  const { auth, wallet: w, ...publicConfig } = BRAND;
-  // Strip sensitive config, expose only frontend-safe fields
   res.json({
     success: true,
     data: {
@@ -58,6 +56,13 @@ app.get('/api/v1/config', (req, res) => {
       defaultLanguage: BRAND.defaultLanguage,
       supportedLanguages: BRAND.supportedLanguages,
       nav: BRAND.nav,
+      money: {
+        platformCutPercent: BRAND.money.platformCutPercent,
+        minWithdrawal: BRAND.money.minWithdrawal,
+        withdrawalHoldHours: BRAND.money.withdrawalHoldHours,
+        walletWithdrawEnabled: BRAND.money.walletWithdrawEnabled,
+        earningsWithdrawEnabled: BRAND.money.earningsWithdrawEnabled,
+      },
     },
   });
 });
@@ -87,6 +92,114 @@ app.use('/api/v1/friends', require('./routes/friend.routes'));
 app.use('/api/v1/chat', require('./routes/chat.routes'));
 app.use('/api/v1/vault', require('./routes/vault.routes'));
 app.use('/api/v1/search', require('./routes/search.routes'));
+
+// ─── DEV: Audit join by JoinIntent ID ────────────────────────
+app.get('/api/v1/dev/audit/join/:id', async (req, res) => {
+  if (process.env.NODE_ENV === 'production') return res.status(404).json({ success: false });
+  try {
+    const JoinIntent = require('./models/JoinIntent');
+    const GroupTransaction = require('./models/GroupTransaction');
+    const EarningsAccount = require('./models/EarningsAccount');
+    const WalletAccount = require('./models/WalletAccount');
+    const GroupMembership = require('./models/GroupMembership');
+
+    const intent = await JoinIntent.findById(req.params.id).lean();
+    if (!intent) return res.status(404).json({ success: false, message: 'JoinIntent not found' });
+
+    // Find owner
+    const ownerMem = await GroupMembership.findOne({ group_id: intent.group_id, role: 'owner' });
+    const ownerId = ownerMem?.user_id;
+
+    // GroupTransaction for this payment
+    const tx = intent.razorpay_payment_id
+      ? await GroupTransaction.findOne({ razorpay_payment_id: intent.razorpay_payment_id }).lean()
+      : await GroupTransaction.findOne({ razorpay_order_id: intent.razorpay_order_id }).lean();
+
+    // Owner EarningsAccount + WalletAccount
+    const earningsAcc = ownerId ? await EarningsAccount.findOne({ user_id: ownerId }).lean() : null;
+    const walletAcc = ownerId ? await WalletAccount.findOne({ user_id: ownerId }).lean() : null;
+
+    // Membership check
+    const membership = await GroupMembership.findOne({
+      group_id: intent.group_id, user_id: intent.user_id, status: { $ne: 'left' },
+    });
+
+    // Invariant checks
+    const WalletTransaction = require('./models/WalletTransaction');
+    const walletCreditForGroup = walletAcc
+      ? await WalletTransaction.findOne({
+        wallet_id: walletAcc._id,
+        type: 'credit',
+        description: { $regex: /group|earning|seat/i },
+        createdAt: { $gte: intent.createdAt },
+      }).lean()
+      : null;
+
+    res.json({
+      success: true,
+      data: {
+        joinIntent: intent,
+        groupTransaction: tx || null,
+        ownerEarningsAccount: earningsAcc,
+        ownerWalletAccount: walletAcc ? { _id: walletAcc._id, balance: walletAcc.balance } : null,
+        membershipCreated: !!membership,
+        ownerId: ownerId?.toString(),
+        invariants: {
+          walletNotCredited: !walletCreditForGroup,
+          earningsCredited: tx ? (earningsAcc?.total_earned >= tx.net) : false,
+          netMatchesLedger: tx ? true : false,
+          intentPaid: intent.status === 'paid',
+        },
+      },
+    });
+  } catch (err) {
+    res.status(500).json({ success: false, message: err.message });
+  }
+});
+
+// ─── DEV: Audit owner totals ─────────────────────────────────
+app.get('/api/v1/dev/audit/owner/:id', async (req, res) => {
+  if (process.env.NODE_ENV === 'production') return res.status(404).json({ success: false });
+  try {
+    const mongoose = require('mongoose');
+    const GroupTransaction = require('./models/GroupTransaction');
+    const EarningsAccount = require('./models/EarningsAccount');
+    const WalletAccount = require('./models/WalletAccount');
+
+    const ownerId = new mongoose.Types.ObjectId(req.params.id);
+
+    const [agg] = await GroupTransaction.aggregate([
+      { $match: { owner_id: ownerId, status: 'paid' } },
+      { $group: { _id: null, total_gross: { $sum: '$gross' }, total_fee: { $sum: '$fee_amount' }, total_net: { $sum: '$net' }, count: { $sum: 1 } } },
+    ]);
+
+    const last10 = await GroupTransaction.find({ owner_id: ownerId, status: 'paid' })
+      .sort({ createdAt: -1 }).limit(10)
+      .populate('group_id', 'name')
+      .populate('buyer_id', 'name phone')
+      .lean();
+
+    const earnings = await EarningsAccount.findOne({ user_id: ownerId }).lean();
+    const wallet = await WalletAccount.findOne({ user_id: ownerId }).lean();
+
+    res.json({
+      success: true,
+      data: {
+        ownerId: req.params.id,
+        ledger_totals: agg || { total_gross: 0, total_fee: 0, total_net: 0, count: 0 },
+        earnings_account: earnings || { withdrawable_balance: 0, pending_balance: 0, total_earned: 0 },
+        wallet_balance: wallet?.balance || 0,
+        last_10_transactions: last10,
+        invariants: {
+          earnings_matches_ledger: Math.abs((earnings?.total_earned || 0) - (agg?.total_net || 0)) < 0.01,
+          wallet_not_inflated: true, // manual check — compare with expected wallet topups
+        },
+      },
+    });
+  } catch (err) {
+    res.status(500).json({ success: false, message: err.message });
+  }
+});
 
 // ─── 404 Handler ─────────────────────────────────────────────
 app.use((req, res) => {

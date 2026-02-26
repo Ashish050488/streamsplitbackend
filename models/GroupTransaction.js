@@ -10,6 +10,7 @@ const schema = new mongoose.Schema({
     net: { type: Number, required: true },
     razorpay_order_id: { type: String },
     razorpay_payment_id: { type: String },
+    pending_release_at: { type: Date },
     status: { type: String, enum: ['pending', 'paid', 'refunded'], default: 'pending' },
 }, { timestamps: true });
 

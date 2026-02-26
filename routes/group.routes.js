@@ -144,10 +144,12 @@ router.post('/:id/join/initiate', authenticate, async (req, res, next) => {
       });
     }
 
-    const feePercent = BRAND.platformCutPercent;
+    const feePercent = BRAND.money.platformCutPercent;
     const gross = group.share_price;
-    const feeAmount = Math.round(gross * feePercent) / 100;
+    const feeAmount = Math.round(gross * feePercent / 100);
     const net = gross - feeAmount;
+    const holdHours = BRAND.money.withdrawalHoldHours || 0;
+    const pendingReleaseAt = holdHours > 0 ? new Date(Date.now() + holdHours * 3600000) : null;
 
     // Find group owner
     const ownerMembership = await GroupMembership.findOne({ group_id: group._id, role: 'owner' });
@@ -168,6 +170,7 @@ router.post('/:id/join/initiate', authenticate, async (req, res, next) => {
         buyer_id: req.user._id,
         gross, fee_percent: feePercent, fee_amount: feeAmount, net,
         razorpay_order_id: rpOrder.id,
+        pending_release_at: pendingReleaseAt,
         status: 'pending',
       });
 
@@ -198,6 +201,7 @@ router.post('/:id/join/initiate', authenticate, async (req, res, next) => {
         gross, fee_percent: feePercent, fee_amount: feeAmount, net,
         razorpay_order_id: devOrderId,
         razorpay_payment_id: devPaymentId,
+        pending_release_at: pendingReleaseAt,
         status: 'paid',
       });
 
@@ -218,10 +222,13 @@ router.post('/:id/join/initiate', authenticate, async (req, res, next) => {
         await updated.save();
       }
 
-      // Credit owner earnings
+      // Credit owner earnings — pending or withdrawable based on hold config
+      const earningsInc = holdHours > 0
+        ? { pending_balance: net, total_earned: net }
+        : { withdrawable_balance: net, total_earned: net };
       await EarningsAccount.findOneAndUpdate(
         { user_id: ownerMembership.user_id },
-        { $inc: { withdrawable_balance: net, total_earned: net } },
+        { $inc: earningsInc },
         { upsert: true }
       );
 

@@ -266,6 +266,7 @@ router.get('/withdrawals', async (req, res, next) => {
     try {
         const filter = {};
         if (req.query.status) filter.status = req.query.status;
+        if (req.query.source) filter.source = req.query.source;
         const requests = await WithdrawalRequest.find(filter)
             .populate('owner_id', 'name phone')
             .sort({ createdAt: -1 });
@@ -315,10 +316,19 @@ router.post('/withdrawals/:id/approve', async (req, res, next) => {
             } catch (payoutErr) {
                 // Payout failed — refund balance and mark rejected
                 console.error('Payout API error:', payoutErr.message);
-                await EarningsAccount.findOneAndUpdate(
-                    { user_id: wr.owner_id },
-                    { $inc: { withdrawable_balance: wr.amount } }
-                );
+                // Refund based on source
+                if (wr.source === 'wallet') {
+                    const WalletAccount = require('../models/WalletAccount');
+                    await WalletAccount.findOneAndUpdate(
+                        { user_id: wr.owner_id },
+                        { $inc: { balance: wr.amount } }
+                    );
+                } else {
+                    await EarningsAccount.findOneAndUpdate(
+                        { user_id: wr.owner_id },
+                        { $inc: { withdrawable_balance: wr.amount } }
+                    );
+                }
                 wr.status = 'rejected';
                 wr.reject_reason = `Payout API error: ${payoutErr.message}`;
                 await wr.save();
@@ -343,11 +353,19 @@ router.post('/withdrawals/:id/reject', async (req, res, next) => {
             return res.status(400).json({ success: false, message: `Cannot reject — status is ${wr.status}` });
         }
 
-        // Refund the amount back to owner's earnings
-        await EarningsAccount.findOneAndUpdate(
-            { user_id: wr.owner_id },
-            { $inc: { withdrawable_balance: wr.amount } }
-        );
+        // Refund the amount based on source
+        if (wr.source === 'wallet') {
+            const WalletAccount = require('../models/WalletAccount');
+            await WalletAccount.findOneAndUpdate(
+                { user_id: wr.owner_id },
+                { $inc: { balance: wr.amount } }
+            );
+        } else {
+            await EarningsAccount.findOneAndUpdate(
+                { user_id: wr.owner_id },
+                { $inc: { withdrawable_balance: wr.amount } }
+            );
+        }
 
         wr.status = 'rejected';
         wr.reject_reason = req.body.reject_reason || 'Rejected by admin';
